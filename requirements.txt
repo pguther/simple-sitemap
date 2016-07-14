@@ -1,0 +1,6 @@
+beautifulsoup4==4.4.1
+bs4==0.0.1
+progressbar2==3.9.4
+python-utils==2.0.0
+requests==2.10.0
+six==1.10.0
