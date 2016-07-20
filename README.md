@@ -7,27 +7,24 @@ simple-sitemap is a tool that allows you generate a text-based visual representa
 ## Installation
 
 #### to install without virtualenv
+    pip install -r requirements.txt
 
-<code>
-pip install -r requirements.txt
-</code>
 
 #### to install with virtualenv
+    virtualenv .  
+    source bin/activate  
+    pip install -r requirements.txt
 
-<code>virtualenv .  
-source bin/activate  
-pip install -r requirements.txt
-</code>
 
 ##### to quit the virtualenv
-<code>deactivate</code>
+    deactivate
 
 ##### to remove the virtualenv
-<code>rm -r bin<br>
-rm -r lib  
-rm -r include  
-rm pip-selfcheck.json
-</code>
+    rm -r bin<br>
+    rm -r lib  
+    rm -r include  
+    rm pip-selfcheck.json
+
 
 ## Usage
 
