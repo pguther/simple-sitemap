@@ -14,8 +14,8 @@ pip install -r requirements.txt
 
 #### to install with virtualenv
 
-<code>virtualenv . <br>
-source bin/activate<br>
+<code>virtualenv .  
+source bin/activate  
 pip install -r requirements.txt
 </code>
 
@@ -24,8 +24,8 @@ pip install -r requirements.txt
 
 ##### to remove the virtualenv
 <code>rm -r bin<br>
-rm -r lib<br>
-rm -r include<br>
+rm -r lib  
+rm -r include  
 rm pip-selfcheck.json
 </code>
 
