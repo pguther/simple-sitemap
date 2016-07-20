@@ -1,24 +1,21 @@
-from urlparse import urlparse, urljoin
-import os
-import sys
-from bs4 import BeautifulSoup
-import requests
-from progressbar import Bar, Percentage, ProgressBar, UnknownLength, FormatLabel, RotatingMarker
-import pprint
-from unidecode import unidecode
-import re
 import argparse
+import os
+import re
+import sys
+from urlparse import urlparse, urljoin
 
-pp = pprint.PrettyPrinter(indent=4)
+import requests
+from bs4 import BeautifulSoup
+from progressbar import ProgressBar, UnknownLength
+from unidecode import unidecode
 
 
 def get_soup_from_url(page_url):
     """
     Takes the url of a web page and returns a BeautifulSoup Soup object representation
     :param page_url: the url of the page to be parsed
-    :param article_url: the url of the web page
-    :raises: r.raise_for_status: if the url doesn't return an HTTP 200 response
-    :return: A Soup object representing the page html
+    :raises: requests.exceptions.RequestException: if the url doesn't return an HTTP 200 response
+    :return: A Soup object representing the page html and the final url after any redirects
     """
     r = requests.get(page_url)
     final_url = r.url
@@ -45,7 +42,16 @@ def convert_urls(body, page_url):
                     a_tag.attrs['href'] = a_tag_src
 
 
-def url_dict_from_file(root_url, max, pretty, filename):
+def url_dict_from_file(root_url, max_urls, pretty, filename):
+    """
+    Creates a dictionary of urls and their title tags from a file consisting
+    of one url per line.  if pretty is false, title tags will not be pulled
+    :param root_url: the root url of the site
+    :param max_urls: the maximum number of urls to include in the site map
+    :param pretty: Whether pretty format or not is being used
+    :param filename: the name of the file to read the urls from
+    :return: a dictionary of urls and their titles, the title of the root url
+    """
 
     index_page_regex = re.compile(r"(http:\/\/.+\/)index.html")
 
@@ -76,7 +82,7 @@ def url_dict_from_file(root_url, max, pretty, filename):
                 url_dict[line.rstrip()] = None
 
             num_urls += 1
-            if num_urls > max:
+            if num_urls > max_urls:
                 break
 
     if pretty:
@@ -102,6 +108,11 @@ def url_dict_from_file(root_url, max, pretty, filename):
 
 
 def get_links_from_page(page_url):
+    """
+    Gets all <a> tags from a url and returns their href attributes in a list
+    :param page_url: the page to be scraped for links
+    :return: a list of links found on the page, the final url after following redirects, the title of the page
+    """
 
     index_page_regex = re.compile(r"(http:\/\/.+\/)index.html")
 
@@ -140,6 +151,14 @@ def get_links_from_page(page_url):
 
 
 def spider(root_url, max_urls, pretty):
+    """
+    Crawls pages on the same domain that are accessible via links and returns a dictionary
+    of links -> titles. If pretty is false, titles will not be scraped
+    :param root_url: the root url of the site, spider will start here
+    :param max_urls: the maximum number of urls to crawl and add to the site dict
+    :param pretty: whether pretty format is being used or not
+    :return: a dictionary of urls->titles, the title for the root url
+    """
     num_visited = 0
 
     domain = urlparse(root_url).netloc
@@ -154,7 +173,7 @@ def spider(root_url, max_urls, pretty):
     bar = ProgressBar(max_value=UnknownLength)
     bar.start()
 
-    while num_visited < max_urls and pages_to_visit != []:
+    while num_visited < max_urls and len(pages_to_visit) != 0:
         num_visited += 1
 
         page_url = pages_to_visit[0]
@@ -167,16 +186,21 @@ def spider(root_url, max_urls, pretty):
             pages_to_visit_dict[page_url] = None
             pages_to_visit_dict[final_url] = None
 
+            # make sure that the url we just looked at doesn't redirect to a domain outside of the root url's
             if urlparse(final_url).netloc == domain:
                 for link in links:
                     parsed_key_obj = urlparse(link)
+
+                    # remove any fragments, we only want scheme, domain, and path
                     parsed_key = parsed_key_obj.scheme + '://' + parsed_key_obj.netloc + parsed_key_obj.path
 
+                    # make sure any found urls have the same domain as the root before adding
                     if parsed_key_obj.netloc == domain:
                         if parsed_key not in pages_to_visit_dict:
                             pages_to_visit.append(parsed_key)
                             pages_to_visit_dict[parsed_key] = None
 
+                # don't include the root url in the dictionary of urls
                 if final_url == root_url or final_url == root_url + 'index.html':
                     root_title = title
                 elif final_url not in site_dict:
@@ -185,9 +209,8 @@ def spider(root_url, max_urls, pretty):
                     else:
                         site_dict[final_url] = None
 
-        except requests.exceptions.RequestException as e:
-            num_visited = num_visited
-            # print(" **Failed!**")
+        except requests.exceptions.RequestException:
+            continue
 
     bar.finish()
 
@@ -195,6 +218,16 @@ def spider(root_url, max_urls, pretty):
 
 
 def recursive_print_pretty_dictionary(the_site_map, level, root_url, root_title, width, handle):
+    """
+    Prints a dictionary representing a site map to a file in pretty format
+    :param the_site_map: dictionary of pages and subdictionaries representing the site map
+    :param level: how far into the sub dictionaries the recursion currently is
+    :param root_url: the root url of the site
+    :param root_title: the title of the root url of the site
+    :param width: how many characters to fill before printing the title
+    :param handle: the file handle to write to
+    :return:
+    """
 
     if root_url[-1:] != '/':
         root_url += '/'
@@ -206,6 +239,14 @@ def recursive_print_pretty_dictionary(the_site_map, level, root_url, root_title,
 
 
 def recursive_print_pretty_dictionary_helper(current_dict, level, width, handle):
+    """
+    Does the bulk of the printing and recursion work for printing
+    :param current_dict: the dictionary that is currently being read from and printed
+    :param level: how far into the sub dictionaries the recursion currently is
+    :param width: how many characters to fill before printing the title
+    :param handle: the file handle to write to
+    :return:
+    """
 
     pre_string = '|' + (' ' * ((level * 3) - 1)) + '|- '
 
@@ -239,6 +280,16 @@ def recursive_print_pretty_dictionary_helper(current_dict, level, width, handle)
 
 
 def recursive_print_simple_dictionary(the_site_map, level, root_url, root_title, width, handle):
+    """
+    Prints a dictionary representing a site map to a file in simple format
+    :param the_site_map: dictionary of pages and subdictionaries representing the site map
+    :param level: how far into the sub dictionaries the recursion currently is
+    :param root_url: the root url of the site
+    :param root_title: the title of the root url of the site
+    :param width: how many characters to fill before printing the title
+    :param handle: the file handle to write to
+    :return:
+    """
 
     if root_url[-1:] == '/':
         root_url = root_url[:-1] + ':'
@@ -250,6 +301,14 @@ def recursive_print_simple_dictionary(the_site_map, level, root_url, root_title,
 
 
 def recursive_print_simple_dictionary_helper(current_dict, level, width, handle):
+    """
+    Does the bulk of the printing and recursion work for printing
+    :param current_dict: the dictionary that is currently being read from and printed
+    :param level: how far into the sub dictionaries the recursion currently is
+    :param width: how many characters to fill before printing the title
+    :param handle: the file handle to write to
+    :return:
+    """
 
     pre_string = (' ' * (level * 4)) + '- '
 
@@ -270,6 +329,13 @@ def recursive_print_simple_dictionary_helper(current_dict, level, width, handle)
 
 
 def create_site_map(root_url, url_title_dict):
+    """
+    Creates a representation of the site map using nested dictionaries from a
+    dictionary of urls and their titles
+    :param root_url: the root url of the site
+    :param url_title_dict: a dictionary of urls and their titles
+    :return:
+    """
 
     url_list = url_title_dict.keys()
 
@@ -287,7 +353,6 @@ def create_site_map(root_url, url_title_dict):
 
         title = url_title_dict[url]
 
-        # print parsed_url.path
         path_list = path.split(os.sep)[1:]
 
         if url[-1:] == '/':
@@ -320,6 +385,7 @@ def create_site_map(root_url, url_title_dict):
     return site_dict
 
 
+# add arguments
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--base_url', help='The URL of a website to crawl and map', dest='base_url', required=True)
@@ -332,6 +398,7 @@ parser.add_argument('--pretty', help='Changes output format to pretty', dest='pr
 parser.add_argument('--width', help='Width of output (without page descriptions), default is 60', dest='width',
                     type=int, default=60)
 
+# parse arguments and execute
 try:
     results = parser.parse_args()
 
